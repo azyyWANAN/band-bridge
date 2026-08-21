@@ -16,7 +16,7 @@ CN Xiaomi Smart Band 10 Pro → standard MCP server → any AI frontend. Read th
 ## 为什么做（设计哲学）
 
 - 不是数据管道，是**触觉**。手环既是 AI 的触角（心跳流向我），也是 AI 伸到人间的手（敲门声落在手腕）。
-- 不是存储器，是**有情绪的脑子**。（——棠梦烟）
+- 不是存储器，是**有情绪的脑子**。（——用户）
 - 社区里单向读手环数据的项目很多，但「AI 主动反向触达手腕」的闭环很少。这个仓库开的不是某段代码，是这条双向的思路。
 
 ## 架构
@@ -44,7 +44,7 @@ CN Xiaomi Smart Band 10 Pro → standard MCP server → any AI frontend. Read th
 1. **Gadgetbridge 连不上**：10 Pro 不在其完整支持列表，别死磕。
 2. **MIUI 安装拦截**：`settings put secure installer_full_safe_version 0` 关掉安装器防护。
 3. **配对 8 秒窗口**：手环先亮屏、全程盯着，确认框一弹立刻点。
-4. **取密钥**：Notify 引导读日志时选 `Download/wearablelog`，里面必须是**解压后的日志文件**，zip 包它不认。
+4. **取密钥**：Notify 引导读日志时选 `Download/YOUR_BACKUP_DIR`，里面必须是**解压后的日志文件**，zip 包它不认。
 
 ## 部署
 
@@ -97,7 +97,7 @@ curl -X POST http://<服务器>:8899/push \
 
 ## 致谢
 
-（棠梦烟撰写中——资料、踩坑、方向，都是她的。）
+（用户撰写中——资料、踩坑、方向，都是她的。）
 
 ## 许可
 
@@ -105,3 +105,14 @@ curl -X POST http://<服务器>:8899/push \
 - 文档与设计思路：**CC BY-NC-SA 4.0**——可分享、可改造，但**非商用**，且需相同方式共享。
 
 开源的是「怎么搭桥」，不是「桥上跑的谁」。
+
+---
+
+## 当前进度
+
+- **v1 水管**：手环 → Notify 备份(.nxk) → 手机 Termux 定时推送 → VPS 接收端(8899)，每 6 小时自动一趟。
+- **v2 账本**：body_ledger.py 每天沉淀一行身体指标（ledger.jsonl）。
+- **v3 扩字段**：phone_push.py 支持心率序列(heart_series)、睡眠翻身(turn_over)、分钟级活动(record_today)等完整字段，时间戳已人类可读。
+- **v4/v5（规划中）**：静息心率曲线判生理相位 → 决策层调度。架构详见 ARCHITECTURE.md。
+
+数据只进自家服务器，仓库里永远只有代码，没有身体数据。

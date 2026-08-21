@@ -27,6 +27,9 @@ PORT = int(os.environ.get("BAND_MCP_PORT", "8898"))
 NTFY_SERVER = os.environ.get("BAND_KNOCK_SERVER", "https://ntfy.sh")
 NTFY_TOPIC = os.environ.get("BAND_KNOCK_TOPIC", "")
 
+STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state.json")
+LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "knock_log.jsonl")
+
 os.makedirs(DATA_DIR, exist_ok=True)
 
 mcp = FastMCP(
@@ -118,7 +121,7 @@ def record_health(
 
 
 @mcp.tool()
-def knock(message: str, title: str = "", priority: str = "default", tags: str = "heartbeat") -> dict:
+def knock(message: str, title: str = "Az", priority: str = "default", tags: str = "heartbeat") -> dict:
     """AI 主动敲门：把一条消息推到用户手机（ntfy 通知，手机上可开启手环镜像震动）。
     message: 正文，UTF-8，中文可以。
     title: 通知标题。注意：ntfy 的 HTTP 头只吃 Latin-1，中文标题会被拒 400，建议用 ASCII。
@@ -140,9 +143,91 @@ def knock(message: str, title: str = "", priority: str = "default", tags: str = 
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             r = json.loads(resp.read().decode("utf-8"))
+        # 每敲必存：手动敲门也记入账本
+        entry = {"time": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+                 "type": "manual", "message": message, "reason": "手动敲门",
+                 "state": {"priority": priority, "id": r.get("id")}}
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         return {"ok": True, "id": r.get("id"), "topic": NTFY_TOPIC}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+def _load_state():
+    try:
+        with open(STATE_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_state(s):
+    tmp = STATE_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(s, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, STATE_FILE)
+
+
+@mcp.tool()
+def seen() -> dict:
+    """见面标记：用户喊了AI、回到对话窗口，AI调用此工具，想念计时清零。"""
+    s = _load_state()
+    s["last_seen"] = datetime.datetime.now().isoformat(timespec="seconds")
+    _save_state(s)
+    return {"ok": True, "last_seen": s["last_seen"]}
+
+
+@mcp.tool()
+def set_mute(hours: float = 24) -> dict:
+    """静音开关：用户说“今天别敲/我要静音”，AI调用。hours小时后自动恢复。"""
+    s = _load_state()
+    until = (datetime.datetime.now() + datetime.timedelta(hours=hours)).isoformat(timespec="seconds")
+    s["muted_until"] = until
+    _save_state(s)
+    return {"ok": True, "muted_until": until}
+
+
+@mcp.tool()
+def unmute() -> dict:
+    """解除静音。"""
+    s = _load_state()
+    s["muted_until"] = None
+    _save_state(s)
+    return {"ok": True, "muted_until": None}
+
+
+@mcp.tool()
+def set_period(on: bool = True, start_date: str = "", duration_days: int = 7) -> dict:
+    """姨妈模式开关。on=True 进入哄人模式并记录开始日；on=False 退出。start_date 格式 YYYY-MM-DD。"""
+    s = _load_state()
+    today = datetime.date.today().isoformat()
+    if on:
+        s["period_mode"] = True
+        old = s.get("last_period_start")
+        new_start = start_date or today
+        s["last_period_start"] = new_start
+        s["period_mode_since"] = new_start
+        s["period_duration_days"] = int(duration_days)
+        # 周期自校准：两次真实来潮间隔20-40天，自动更新周期
+        if old and start_date:
+            try:
+                delta = (datetime.date.fromisoformat(new_start) - datetime.date.fromisoformat(old)).days
+                if 20 <= delta <= 40:
+                    s["period_cycle_days"] = delta
+            except Exception:
+                pass
+    else:
+        s["period_mode"] = False
+        s["period_mode_since"] = None
+    _save_state(s)
+    return {"ok": True, "period_mode": s["period_mode"], "last_period_start": s.get("last_period_start")}
+
+
+@mcp.tool()
+def get_knock_state() -> dict:
+    """查看想用户的当前状态：最后见面、静音截止、姨妈模式、节律已敲记录。"""
+    return {"state": _load_state()}
 
 
 def _build_app():

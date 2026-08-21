@@ -1,6 +1,9 @@
+data/
 .env
+*.jsonl
+knock_log.jsonl
+*.nxk
+*.pyc
+__pycache__/
 token.txt
 venv/
-data/
-__pycache__/
-*.pyc
