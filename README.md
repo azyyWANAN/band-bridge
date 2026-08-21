@@ -11,7 +11,7 @@ CN Xiaomi Smart Band 10 Pro → standard MCP server → any AI frontend. Read th
 ## 它是什么
 
 - **基础版（本仓库）**：手环健康数据（心率、睡眠、步数、电量）经过 Notify for Xiaomi 采集 → 推送脚本 → 落盘 → FastMCP 服务，任何支持 Streamable HTTP 的前端**开箱即连**，填三样就行：地址、传输类型、token。
-- **豪华版（Roadmap）**：新增 `knock` 工具——AI 主动发消息 → ntfy / LoverConnect → 手机通知栏 → 同步到手环，**手腕上震一下**。从「单向读数据」变成「AI 反过来碰到人」的双向闭环。
+- **豪华版（已上车 v1）**：`knock` 工具——AI 主动发消息 → ntfy / LoverConnect → 手机通知栏 → 同步到手环，**手腕上震一下**。从「单向读数据」变成「AI 反过来碰到人」的双向闭环。
 
 ## 为什么做（设计哲学）
 
@@ -76,6 +76,7 @@ source .env
 | `get_health` | 汇总最新状态：心率、睡眠、步数、电量、更新时间 |
 | `read_health_data` | 按类型读历史（all / heart_rate / sleep / steps / battery） |
 | `record_health` | 录入一条数据（手动记录，或脚本以工具形式推送） |
+| `knock` | AI 主动敲门：推消息到手机（ntfy 通知，可镜像手环震动） |
 
 ## 数据推送
 
@@ -90,7 +91,7 @@ curl -X POST http://<服务器>:8899/push \
 
 ## Roadmap（豪华版）
 
-- [ ] `knock` 工具：AI 主动敲门，走 ntfy / LoverConnect → 手机通知 → 手环震动
+- [x] `knock` 工具：AI 主动敲门，走 ntfy → 手机通知 → 手环震动（v1 已实现）
 - [ ] 手机端自动备份 + 推送脚本打包成一键配置
 - [ ] 健康事件提醒（心率异常、久坐、睡眠总结早安卡）
 

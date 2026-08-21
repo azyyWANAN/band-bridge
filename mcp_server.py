@@ -1,34 +1,40 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-band-bridge : 手环健康数据 → 标准 MCP 服务
+band-bridge : 手环健康数据 → 标准 MCP 服务（读）+ AI 主动敲门（敲）
 
-目标：任何支持 MCP（Streamable HTTP）的前端都能接。
-- 前端把 http://<host>:8898/mcp 挂上即可，零改动。
-- 数据由手机端脚本/推送层写入 data/ 目录，本服务只读不写（record_health 例外，供手动录入）。
-- 鉴权：可选。设置环境变量 BAND_MCP_TOKEN 后，请求需带 Authorization: Bearer <token>。
+读：任何支持 MCP（Streamable HTTP）的前端都能接。
+  - 前端把 http://<host>:8898/mcp 挂上即可，零改动。
+  - 数据由手机端脚本/推送层写入 data/ 目录，本服务只读不写（record_health 例外，供手动录入）。
+敲：knock 工具把一条消息推到用户手机（ntfy 通知，手机上可开启手环镜像震动）。
+
+鉴权：可选。设置环境变量 BAND_MCP_TOKEN 后，请求需带 Authorization: Bearer <token>。
 
 运行：
-  BAND_MCP_TOKEN=xxx python3 mcp_server.py
+  BAND_MCP_TOKEN=xxx BAND_KNOCK_TOPIC=xxx python3 mcp_server.py
 """
 import os
 import json
 import glob
 import datetime
+import urllib.request
 
 from mcp.server.fastmcp import FastMCP
 
 DATA_DIR = os.environ.get("BAND_DATA_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "data"))
 TOKEN = os.environ.get("BAND_MCP_TOKEN", "")
 PORT = int(os.environ.get("BAND_MCP_PORT", "8898"))
+NTFY_SERVER = os.environ.get("BAND_KNOCK_SERVER", "https://ntfy.sh")
+NTFY_TOPIC = os.environ.get("BAND_KNOCK_TOPIC", "")
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
 mcp = FastMCP(
     "band-bridge",
     instructions=(
-        "手环健康数据查询与录入服务。"
-        "get_health 拿最新状态；read_health_data 读历史；record_health 手动录入。"
+        "手环健康数据查询与录入（读）+ AI 主动敲门（敲）。"
+        "get_health 拿最新状态；read_health_data 读历史；record_health 手动录入；"
+        "knock 推一条消息到用户手机（ntfy 通知，可镜像到手环震动）。"
     ),
 )
 
@@ -111,6 +117,34 @@ def record_health(
     return {"ok": True, "file": fname}
 
 
+@mcp.tool()
+def knock(message: str, title: str = "", priority: str = "default", tags: str = "heartbeat") -> dict:
+    """AI 主动敲门：把一条消息推到用户手机（ntfy 通知，手机上可开启手环镜像震动）。
+    message: 正文，UTF-8，中文可以。
+    title: 通知标题。注意：ntfy 的 HTTP 头只吃 Latin-1，中文标题会被拒 400，建议用 ASCII。
+    priority: default | low | high。high 会强提醒（适合紧急惦记）。
+    tags: 通知图标标签，默认 heartbeat。
+    """
+    if not NTFY_TOPIC:
+        return {"ok": False, "error": "BAND_KNOCK_TOPIC 未设置"}
+    req = urllib.request.Request(
+        NTFY_SERVER + "/" + NTFY_TOPIC,
+        data=message.encode("utf-8"),
+        method="POST",
+        headers={"Content-Type": "text/plain; charset=utf-8"},
+    )
+    if title:
+        req.add_header("Title", title.encode("utf-8").decode("latin-1", "replace"))
+    req.add_header("Priority", priority)
+    req.add_header("Tags", tags)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            r = json.loads(resp.read().decode("utf-8"))
+        return {"ok": True, "id": r.get("id"), "topic": NTFY_TOPIC}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 def _build_app():
     app = mcp.streamable_http_app()
     if not TOKEN:
@@ -141,5 +175,6 @@ def _build_app():
 if __name__ == "__main__":
     import uvicorn
 
-    print("band-bridge on 0.0.0.0:%s, token=%s" % (PORT, "set" if TOKEN else "NONE"))
+    print("band-bridge on 0.0.0.0:%s, token=%s, knock=%s" % (
+        PORT, "set" if TOKEN else "NONE", "on" if NTFY_TOPIC else "off"))
     uvicorn.run(_build_app(), host="0.0.0.0", port=PORT, log_level="warning")
