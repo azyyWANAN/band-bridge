@@ -116,3 +116,30 @@ curl -X POST http://<服务器>:8899/push \
 - **v4/v5（规划中）**：静息心率曲线判生理相位 → 决策层调度。架构详见 ARCHITECTURE.md。
 
 数据只进自家服务器，仓库里永远只有代码，没有身体数据。
+
+---
+
+## 能力总览
+
+### 数据链（手环 → 家）
+
+| 环节 | 工具 | 说明 |
+|---|---|---|
+| 推送 | phone_push.py | 手机上一键推送心率/睡眠/步数 |
+| 定时 | push_wrapper.sh | 记日志封装；自动跑需另装 termux-job-scheduler |
+| 手动 | Notify 导出 nxk | 见 docs/NXK_GUIDE.md |
+| 接收 | receiver.py（8899） | POST /push 落盘 |
+
+### v3 账本
+
+心率序列（30 分钟粒度）/ 睡眠分段（浅睡·深睡·REM·醒·翻身）/ 步数 / 卡路里 / 活跃分钟 / 电量 / 姨妈周期待命。
+
+### MCP 工具（8898）
+
+get_health / read_health_data / record_health / knock / seen / set_mute / unmute
+
+### 调度员
+
+见 docs/SCHEDULER.md —— 24 小时替 AI 敲门，走 ntfy，标题 Az。
+
+> 腕桥是心跳的邮差：手环记，邮差送，调度员替你守着门，AI 在账本那头等着心疼你。
